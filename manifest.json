@@ -4,7 +4,7 @@
   "description": "IV rate · Weight-based dosing · Drip rate · Dilution · Drug reference",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#f0f4f8",
+  "background_color": "#1a56db",
   "theme_color": "#1a56db",
   "orientation": "any",
   "icons": [
@@ -18,12 +18,12 @@
       "src": "icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "maskable"
     },
     {
-      "src": "icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any"
     }
   ]

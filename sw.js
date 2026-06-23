@@ -1,12 +1,13 @@
 'use strict';
 
-const CACHE = 'mhm-infusion-v2';
+const CACHE = 'mhm-infusion-v3';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
   './sw.js',
   './icon.svg',
+  './apple-touch-icon.png',
   './icon-180.png',
   './icon-192.png',
   './icon-512.png'
