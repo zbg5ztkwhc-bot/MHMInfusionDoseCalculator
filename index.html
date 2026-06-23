@@ -721,14 +721,14 @@ tbody td {
       <div class="card-header">
         <div class="card-header-icon">⚖️</div>
         <div>
-          <h2>Weight-Based Infusion Calculator</h2>
-          <p>Convert a desired dose per kg to mL/hr infusion rate</p>
+          <h2>Dose → Rate Calculator</h2>
+          <p>Weight-based (per kg) or fixed dose (mg, mcg, units) to mL/hr</p>
         </div>
       </div>
       <div class="card-body">
 
         <div class="form-grid">
-          <div class="form-group">
+          <div class="form-group" id="wb-weight-group">
             <label>Patient Weight (kg)</label>
             <input type="number" id="wb-weight" placeholder="e.g. 70" min="0" step="any" oninput="calcWeightBased()" />
             <div class="quick-fill">
@@ -745,11 +745,21 @@ tbody td {
           <div class="form-group">
             <label>Dose Unit</label>
             <select id="wb-dose-unit" onchange="calcWeightBased()">
-              <option value="mcg_kg_min">mcg/kg/min</option>
-              <option value="mcg_kg_hr">mcg/kg/hr</option>
-              <option value="mg_kg_hr">mg/kg/hr</option>
-              <option value="mg_kg_day">mg/kg/day</option>
-              <option value="units_kg_hr">units/kg/hr</option>
+              <optgroup label="Weight-based (per kg)">
+                <option value="mcg_kg_min">mcg/kg/min</option>
+                <option value="mcg_kg_hr">mcg/kg/hr</option>
+                <option value="mg_kg_hr">mg/kg/hr</option>
+                <option value="mg_kg_day">mg/kg/day</option>
+                <option value="units_kg_hr">units/kg/hr</option>
+              </optgroup>
+              <optgroup label="Fixed dose (no weight needed)">
+                <option value="mg_hr">mg/hr</option>
+                <option value="mcg_hr">mcg/hr</option>
+                <option value="mg_min">mg/min</option>
+                <option value="mcg_min">mcg/min</option>
+                <option value="units_hr">units/hr</option>
+                <option value="units_min">units/min</option>
+              </optgroup>
             </select>
           </div>
           <div class="form-group">
@@ -1498,58 +1508,94 @@ function calcDuration() {
   ), 'success');
 }
 
-// ── Tab 2: Weight-Based ────────────────────────────────────────────────────────
+// ── Tab 2: Weight-Based / Fixed-Dose ──────────────────────────────────────────
 function calcWeightBased() {
-  const weight   = getVal('wb-weight');
   const dose     = getVal('wb-dose');
   const conc     = getVal('wb-conc');
   const doseUnit = document.getElementById('wb-dose-unit').value;
   const concUnit = document.getElementById('wb-conc-unit').value;
+  const isWT     = doseUnit.includes('_kg_');
 
-  if (!weight || !dose || !conc) { hideResult('wb-result'); return; }
+  // Show weight field only for per-kg dose units
+  document.getElementById('wb-weight-group').style.display = isWT ? '' : 'none';
 
-  // Normalise everything to mg/mL and mg/kg/hr first
-  let doseMgKgHr, concMgMl;
+  if (!dose || !conc) { hideResult('wb-result'); return; }
 
-  // Dose normalisation → mg/kg/hr
-  if (doseUnit === 'mcg_kg_min') doseMgKgHr = dose * 60 / 1000;
-  else if (doseUnit === 'mcg_kg_hr') doseMgKgHr = dose / 1000;
-  else if (doseUnit === 'mg_kg_hr') doseMgKgHr = dose;
-  else if (doseUnit === 'mg_kg_day') doseMgKgHr = dose / 24;
-  else if (doseUnit === 'units_kg_hr') doseMgKgHr = dose; // treat units as mg-equivalent
+  // Concentration normalisation → base unit /mL
+  let concBase;
+  if (concUnit === 'mcg_ml')     concBase = conc / 1000;  // → mg/mL
+  else if (concUnit === 'mg_ml') concBase = conc;
+  else                           concBase = conc;          // units/mL as-is
 
-  // Concentration normalisation → mg/mL (or units/mL)
-  if (concUnit === 'mcg_ml') concMgMl = conc / 1000;
-  else if (concUnit === 'mg_ml') concMgMl = conc;
-  else if (concUnit === 'units_ml') concMgMl = conc;
+  let rateMLhr, rows;
 
-  const rateMLhr = (doseMgKgHr * weight) / concMgMl;
+  if (isWT) {
+    const weight = getVal('wb-weight');
+    if (!weight) { hideResult('wb-result'); return; }
 
-  // Update formula display
+    // Dose normalisation → mg/kg/hr
+    let doseMgKgHr;
+    if (doseUnit === 'mcg_kg_min')    doseMgKgHr = dose * 60 / 1000;
+    else if (doseUnit === 'mcg_kg_hr') doseMgKgHr = dose / 1000;
+    else if (doseUnit === 'mg_kg_hr')  doseMgKgHr = dose;
+    else if (doseUnit === 'mg_kg_day') doseMgKgHr = dose / 24;
+    else                               doseMgKgHr = dose;  // units/kg/hr
+
+    rateMLhr = (doseMgKgHr * weight) / concBase;
+    const totalHr = doseMgKgHr * weight;
+    rows = [
+      ['Patient weight', fmt(weight) + ' kg'],
+      ['Desired dose',   fmt(dose) + ' ' + doseUnit.replace(/_/g, '/')],
+      ['Concentration',  fmt(conc) + ' ' + concUnit.replace(/_/g, '/')],
+      ['Total dose/hr',  fmt(totalHr, 3) + (concUnit === 'units_ml' ? ' units/hr' : ' mg/hr')]
+    ];
+  } else {
+    // Fixed-dose: normalise to /hr equivalent
+    let dosePerHr;
+    if (doseUnit === 'mg_hr')         dosePerHr = dose;
+    else if (doseUnit === 'mcg_hr')   dosePerHr = dose / 1000;
+    else if (doseUnit === 'mg_min')   dosePerHr = dose * 60;
+    else if (doseUnit === 'mcg_min')  dosePerHr = dose * 60 / 1000;
+    else if (doseUnit === 'units_hr') dosePerHr = dose;
+    else                              dosePerHr = dose * 60;  // units/min
+
+    rateMLhr = dosePerHr / concBase;
+    const unitLabel = doseUnit.replace(/_/g, '/');
+    const isUnits   = doseUnit.startsWith('units');
+    const isPerMin  = doseUnit.endsWith('_min');
+    // Show the hr↔min equivalent for convenience
+    const altLabel  = isPerMin
+      ? (isUnits ? 'units/hr' : (doseUnit.startsWith('mcg') ? 'mcg/hr' : 'mg/hr'))
+      : (isUnits ? 'units/min' : (doseUnit.startsWith('mcg') ? 'mcg/min' : 'mg/min'));
+    const altVal    = isPerMin ? fmt(dose * 60, 3) : fmt(dose / 60, 3);
+    rows = [
+      ['Desired dose',  fmt(dose) + ' ' + unitLabel],
+      ['Concentration', fmt(conc) + ' ' + concUnit.replace(/_/g, '/')],
+      [isPerMin ? 'Equivalent /hr' : 'Equivalent /min', altVal + ' ' + altLabel]
+    ];
+  }
+
+  // Formula display
   const formulas = {
-    mcg_kg_min: 'Rate (mL/hr) = [Dose (mcg/kg/min) × Weight (kg) × 60] ÷ [Conc (mcg/mL)]',
-    mcg_kg_hr:  'Rate (mL/hr) = [Dose (mcg/kg/hr) × Weight (kg)] ÷ [Conc (mcg/mL)]',
-    mg_kg_hr:   'Rate (mL/hr) = [Dose (mg/kg/hr) × Weight (kg)] ÷ [Conc (mg/mL)]',
-    mg_kg_day:  'Rate (mL/hr) = [Dose (mg/kg/day) × Weight (kg)] ÷ [Conc (mg/mL) × 24]',
-    units_kg_hr:'Rate (mL/hr) = [Dose (units/kg/hr) × Weight (kg)] ÷ [Conc (units/mL)]',
+    mcg_kg_min:  'Rate (mL/hr) = [Dose (mcg/kg/min) × Weight (kg) × 60] ÷ Conc (mcg/mL)',
+    mcg_kg_hr:   'Rate (mL/hr) = [Dose (mcg/kg/hr) × Weight (kg)] ÷ Conc (mcg/mL)',
+    mg_kg_hr:    'Rate (mL/hr) = [Dose (mg/kg/hr) × Weight (kg)] ÷ Conc (mg/mL)',
+    mg_kg_day:   'Rate (mL/hr) = [Dose (mg/kg/day) × Weight (kg)] ÷ [Conc (mg/mL) × 24]',
+    units_kg_hr: 'Rate (mL/hr) = [Dose (units/kg/hr) × Weight (kg)] ÷ Conc (units/mL)',
+    mg_hr:       'Rate (mL/hr) = Dose (mg/hr) ÷ Conc (mg/mL)',
+    mcg_hr:      'Rate (mL/hr) = Dose (mcg/hr) ÷ Conc (mcg/mL)',
+    mg_min:      'Rate (mL/hr) = Dose (mg/min) × 60 ÷ Conc (mg/mL)',
+    mcg_min:     'Rate (mL/hr) = Dose (mcg/min) × 60 ÷ Conc (mcg/mL)',
+    units_hr:    'Rate (mL/hr) = Dose (units/hr) ÷ Conc (units/mL)',
+    units_min:   'Rate (mL/hr) = Dose (units/min) × 60 ÷ Conc (units/mL)',
   };
-  document.getElementById('wb-formula').textContent = formulas[doseUnit];
+  document.getElementById('wb-formula').textContent = formulas[doseUnit] || '';
 
-  const totalDoseMgHr = doseMgKgHr * weight;
-
-  showResult('wb-result', resultHtml(
-    fmt(rateMLhr, 2), 'mL/hr',
-    [
-      ['Patient weight',  fmt(weight) + ' kg'],
-      ['Desired dose',    fmt(dose) + ' ' + doseUnit.replace(/_/g,'/')],
-      ['Concentration',   fmt(conc) + ' ' + concUnit.replace(/_/g,'/')],
-      ['Total dose/hr',   fmt(totalDoseMgHr, 3) + (concUnit === 'units_ml' ? ' units/hr' : ' mg/hr')]
-    ]
-  ), 'success');
+  showResult('wb-result', resultHtml(fmt(rateMLhr, 2), 'mL/hr', rows), 'success');
 }
 
 function clearWeightBased() {
-  clearForm('wb-weight','wb-dose','wb-conc');
+  clearForm('wb-weight', 'wb-dose', 'wb-conc');
   hideResult('wb-result');
 }
 
