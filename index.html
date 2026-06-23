@@ -763,16 +763,26 @@ tbody td {
             </select>
           </div>
           <div class="form-group">
-            <label>Drug Concentration</label>
-            <input type="number" id="wb-conc" placeholder="e.g. 1600" min="0" step="any" oninput="calcWeightBased()" />
+            <label>Drug in Bag</label>
+            <input type="number" id="wb-drug-amount" placeholder="e.g. 400" min="0" step="any" oninput="calcWeightBased()" />
           </div>
           <div class="form-group">
-            <label>Concentration Unit</label>
-            <select id="wb-conc-unit" onchange="calcWeightBased()">
-              <option value="mcg_ml">mcg/mL</option>
-              <option value="mg_ml">mg/mL</option>
-              <option value="units_ml">units/mL</option>
+            <label>Drug Unit</label>
+            <select id="wb-drug-unit" onchange="calcWeightBased()">
+              <option value="mg">mg</option>
+              <option value="g">g</option>
+              <option value="units">units</option>
             </select>
+          </div>
+          <div class="form-group">
+            <label>Bag Volume (mL)</label>
+            <input type="number" id="wb-bag-vol" placeholder="e.g. 250" min="0" step="any" oninput="calcWeightBased()" />
+            <div class="quick-fill">
+              <span class="qbtn" onclick="setVal('wb-bag-vol',50)">50</span>
+              <span class="qbtn" onclick="setVal('wb-bag-vol',100)">100</span>
+              <span class="qbtn" onclick="setVal('wb-bag-vol',250)">250</span>
+              <span class="qbtn" onclick="setVal('wb-bag-vol',500)">500</span>
+            </div>
           </div>
         </div>
 
@@ -812,13 +822,31 @@ tbody td {
             <input type="number" id="rev-weight" placeholder="e.g. 70" min="0" step="any" oninput="calcReverse()" />
           </div>
           <div class="form-group">
-            <label>Concentration (mcg/mL)</label>
-            <input type="number" id="rev-conc" placeholder="e.g. 1600" min="0" step="any" oninput="calcReverse()" />
+            <label>Drug in Bag</label>
+            <input type="number" id="rev-drug-amount" placeholder="e.g. 400" min="0" step="any" oninput="calcReverse()" />
+          </div>
+          <div class="form-group">
+            <label>Drug Unit</label>
+            <select id="rev-drug-unit" onchange="calcReverse()">
+              <option value="mg">mg</option>
+              <option value="g">g</option>
+              <option value="units">units</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Bag Volume (mL)</label>
+            <input type="number" id="rev-bag-vol" placeholder="e.g. 250" min="0" step="any" oninput="calcReverse()" />
+            <div class="quick-fill">
+              <span class="qbtn" onclick="setVal('rev-bag-vol',50)">50</span>
+              <span class="qbtn" onclick="setVal('rev-bag-vol',100)">100</span>
+              <span class="qbtn" onclick="setVal('rev-bag-vol',250)">250</span>
+              <span class="qbtn" onclick="setVal('rev-bag-vol',500)">500</span>
+            </div>
           </div>
         </div>
         <div class="btn-group">
           <button class="btn btn-primary" onclick="calcReverse()">🧮 Calculate Dose</button>
-          <button class="btn btn-secondary" onclick="clearForm('rev-rate','rev-weight','rev-conc')">↺ Clear</button>
+          <button class="btn btn-secondary" onclick="clearForm('rev-rate','rev-weight','rev-drug-amount','rev-bag-vol')">↺ Clear</button>
         </div>
         <div class="result-box" id="rev-result">
           <div class="result-title">Current Dose</div>
@@ -1510,22 +1538,31 @@ function calcDuration() {
 
 // ── Tab 2: Weight-Based / Fixed-Dose ──────────────────────────────────────────
 function calcWeightBased() {
-  const dose     = getVal('wb-dose');
-  const conc     = getVal('wb-conc');
-  const doseUnit = document.getElementById('wb-dose-unit').value;
-  const concUnit = document.getElementById('wb-conc-unit').value;
-  const isWT     = doseUnit.includes('_kg_');
+  const dose       = getVal('wb-dose');
+  const drugAmount = getVal('wb-drug-amount');
+  const bagVol     = getVal('wb-bag-vol');
+  const doseUnit   = document.getElementById('wb-dose-unit').value;
+  const drugUnit   = document.getElementById('wb-drug-unit').value;
+  const isWT       = doseUnit.includes('_kg_');
 
-  // Show weight field only for per-kg dose units
   document.getElementById('wb-weight-group').style.display = isWT ? '' : 'none';
 
-  if (!dose || !conc) { hideResult('wb-result'); return; }
+  if (!dose || !drugAmount || !bagVol) { hideResult('wb-result'); return; }
 
-  // Concentration normalisation → base unit /mL
-  let concBase;
-  if (concUnit === 'mcg_ml')     concBase = conc / 1000;  // → mg/mL
-  else if (concUnit === 'mg_ml') concBase = conc;
-  else                           concBase = conc;          // units/mL as-is
+  // Derive concentration from drug amount + bag volume
+  let concMgMl, concMcgMl, concUnitsMl, concStr, concFormula;
+  if (drugUnit === 'units') {
+    concUnitsMl  = drugAmount / bagVol;
+    concStr      = fmt(concUnitsMl, 4) + ' units/mL';
+    concFormula  = 'Conc = Drug (units) ÷ Bag Vol (mL)  →  ' + concStr;
+  } else {
+    const mgAmount = drugUnit === 'g' ? drugAmount * 1000 : drugAmount;
+    concMgMl  = mgAmount / bagVol;
+    concMcgMl = concMgMl * 1000;
+    concStr   = fmt(concMgMl, 4) + ' mg/mL  (' + fmt(concMcgMl, 2) + ' mcg/mL)';
+    concFormula = (drugUnit === 'g' ? 'Conc = Drug (g) × 1000 ÷ Bag Vol (mL)' : 'Conc = Drug (mg) ÷ Bag Vol (mL)') +
+                  '  →  ' + concStr;
+  }
 
   let rateMLhr, rows;
 
@@ -1533,91 +1570,129 @@ function calcWeightBased() {
     const weight = getVal('wb-weight');
     if (!weight) { hideResult('wb-result'); return; }
 
-    // Dose normalisation → mg/kg/hr
-    let doseMgKgHr;
-    if (doseUnit === 'mcg_kg_min')    doseMgKgHr = dose * 60 / 1000;
-    else if (doseUnit === 'mcg_kg_hr') doseMgKgHr = dose / 1000;
-    else if (doseUnit === 'mg_kg_hr')  doseMgKgHr = dose;
-    else if (doseUnit === 'mg_kg_day') doseMgKgHr = dose / 24;
-    else                               doseMgKgHr = dose;  // units/kg/hr
+    if      (doseUnit === 'mcg_kg_min')  rateMLhr = (dose * weight * 60) / concMcgMl;
+    else if (doseUnit === 'mcg_kg_hr')   rateMLhr = (dose * weight) / concMcgMl;
+    else if (doseUnit === 'mg_kg_hr')    rateMLhr = (dose * weight) / concMgMl;
+    else if (doseUnit === 'mg_kg_day')   rateMLhr = (dose * weight) / (concMgMl * 24);
+    else if (doseUnit === 'units_kg_hr') rateMLhr = (dose * weight) / concUnitsMl;
 
-    rateMLhr = (doseMgKgHr * weight) / concBase;
-    const totalHr = doseMgKgHr * weight;
+    let doseMgKgHr;
+    if      (doseUnit === 'mcg_kg_min')  doseMgKgHr = dose * 60 / 1000;
+    else if (doseUnit === 'mcg_kg_hr')   doseMgKgHr = dose / 1000;
+    else if (doseUnit === 'mg_kg_hr')    doseMgKgHr = dose;
+    else if (doseUnit === 'mg_kg_day')   doseMgKgHr = dose / 24;
+    else                                 doseMgKgHr = dose;
+
+    const totalHr  = doseMgKgHr * weight;
+    const isUnits  = doseUnit.startsWith('units');
     rows = [
-      ['Patient weight', fmt(weight) + ' kg'],
-      ['Desired dose',   fmt(dose) + ' ' + doseUnit.replace(/_/g, '/')],
-      ['Concentration',  fmt(conc) + ' ' + concUnit.replace(/_/g, '/')],
-      ['Total dose/hr',  fmt(totalHr, 3) + (concUnit === 'units_ml' ? ' units/hr' : ' mg/hr')]
+      ['Patient weight',    fmt(weight) + ' kg'],
+      ['Desired dose',      fmt(dose) + ' ' + doseUnit.replace(/_/g, '/')],
+      ['Bag concentration', concStr],
+      ['Total dose/hr',     fmt(totalHr, 3) + (isUnits ? ' units/hr' : ' mg/hr')]
     ];
   } else {
-    // Fixed-dose: normalise to /hr equivalent
-    let dosePerHr;
-    if (doseUnit === 'mg_hr')         dosePerHr = dose;
-    else if (doseUnit === 'mcg_hr')   dosePerHr = dose / 1000;
-    else if (doseUnit === 'mg_min')   dosePerHr = dose * 60;
-    else if (doseUnit === 'mcg_min')  dosePerHr = dose * 60 / 1000;
-    else if (doseUnit === 'units_hr') dosePerHr = dose;
-    else                              dosePerHr = dose * 60;  // units/min
+    if      (doseUnit === 'mg_hr')       rateMLhr = dose / concMgMl;
+    else if (doseUnit === 'mcg_hr')      rateMLhr = dose / concMcgMl;
+    else if (doseUnit === 'mg_min')      rateMLhr = (dose * 60) / concMgMl;
+    else if (doseUnit === 'mcg_min')     rateMLhr = (dose * 60) / concMcgMl;
+    else if (doseUnit === 'units_hr')    rateMLhr = dose / concUnitsMl;
+    else if (doseUnit === 'units_min')   rateMLhr = (dose * 60) / concUnitsMl;
 
-    rateMLhr = dosePerHr / concBase;
     const unitLabel = doseUnit.replace(/_/g, '/');
-    const isUnits   = doseUnit.startsWith('units');
     const isPerMin  = doseUnit.endsWith('_min');
-    // Show the hr↔min equivalent for convenience
+    const isUnits   = doseUnit.startsWith('units');
     const altLabel  = isPerMin
-      ? (isUnits ? 'units/hr' : (doseUnit.startsWith('mcg') ? 'mcg/hr' : 'mg/hr'))
-      : (isUnits ? 'units/min' : (doseUnit.startsWith('mcg') ? 'mcg/min' : 'mg/min'));
+      ? (isUnits ? 'units/hr' : doseUnit.startsWith('mcg') ? 'mcg/hr' : 'mg/hr')
+      : (isUnits ? 'units/min' : doseUnit.startsWith('mcg') ? 'mcg/min' : 'mg/min');
     const altVal    = isPerMin ? fmt(dose * 60, 3) : fmt(dose / 60, 3);
     rows = [
-      ['Desired dose',  fmt(dose) + ' ' + unitLabel],
-      ['Concentration', fmt(conc) + ' ' + concUnit.replace(/_/g, '/')],
+      ['Desired dose',      fmt(dose) + ' ' + unitLabel],
+      ['Bag concentration', concStr],
       [isPerMin ? 'Equivalent /hr' : 'Equivalent /min', altVal + ' ' + altLabel]
     ];
   }
 
-  // Formula display
-  const formulas = {
-    mcg_kg_min:  'Rate (mL/hr) = [Dose (mcg/kg/min) × Weight (kg) × 60] ÷ Conc (mcg/mL)',
-    mcg_kg_hr:   'Rate (mL/hr) = [Dose (mcg/kg/hr) × Weight (kg)] ÷ Conc (mcg/mL)',
-    mg_kg_hr:    'Rate (mL/hr) = [Dose (mg/kg/hr) × Weight (kg)] ÷ Conc (mg/mL)',
-    mg_kg_day:   'Rate (mL/hr) = [Dose (mg/kg/day) × Weight (kg)] ÷ [Conc (mg/mL) × 24]',
-    units_kg_hr: 'Rate (mL/hr) = [Dose (units/kg/hr) × Weight (kg)] ÷ Conc (units/mL)',
-    mg_hr:       'Rate (mL/hr) = Dose (mg/hr) ÷ Conc (mg/mL)',
-    mcg_hr:      'Rate (mL/hr) = Dose (mcg/hr) ÷ Conc (mcg/mL)',
-    mg_min:      'Rate (mL/hr) = Dose (mg/min) × 60 ÷ Conc (mg/mL)',
-    mcg_min:     'Rate (mL/hr) = Dose (mcg/min) × 60 ÷ Conc (mcg/mL)',
-    units_hr:    'Rate (mL/hr) = Dose (units/hr) ÷ Conc (units/mL)',
-    units_min:   'Rate (mL/hr) = Dose (units/min) × 60 ÷ Conc (units/mL)',
+  const rateFormulas = {
+    mcg_kg_min:  'Rate = Dose (mcg/kg/min) × Weight × 60 ÷ Conc (mcg/mL)',
+    mcg_kg_hr:   'Rate = Dose (mcg/kg/hr) × Weight ÷ Conc (mcg/mL)',
+    mg_kg_hr:    'Rate = Dose (mg/kg/hr) × Weight ÷ Conc (mg/mL)',
+    mg_kg_day:   'Rate = Dose (mg/kg/day) × Weight ÷ [Conc (mg/mL) × 24]',
+    units_kg_hr: 'Rate = Dose (units/kg/hr) × Weight ÷ Conc (units/mL)',
+    mg_hr:       'Rate = Dose (mg/hr) ÷ Conc (mg/mL)',
+    mcg_hr:      'Rate = Dose (mcg/hr) ÷ Conc (mcg/mL)',
+    mg_min:      'Rate = Dose (mg/min) × 60 ÷ Conc (mg/mL)',
+    mcg_min:     'Rate = Dose (mcg/min) × 60 ÷ Conc (mcg/mL)',
+    units_hr:    'Rate = Dose (units/hr) ÷ Conc (units/mL)',
+    units_min:   'Rate = Dose (units/min) × 60 ÷ Conc (units/mL)',
   };
-  document.getElementById('wb-formula').textContent = formulas[doseUnit] || '';
+  document.getElementById('wb-formula').innerHTML =
+    concFormula + '<br>' + (rateFormulas[doseUnit] || '');
 
   showResult('wb-result', resultHtml(fmt(rateMLhr, 2), 'mL/hr', rows), 'success');
 }
 
 function clearWeightBased() {
-  clearForm('wb-weight', 'wb-dose', 'wb-conc');
+  clearForm('wb-weight', 'wb-dose', 'wb-drug-amount', 'wb-bag-vol');
   hideResult('wb-result');
 }
 
 function calcReverse() {
-  const rate   = getVal('rev-rate');
-  const weight = getVal('rev-weight');
-  const conc   = getVal('rev-conc');
-  if (!rate || !weight || !conc) { hideResult('rev-result'); return; }
+  const rate       = getVal('rev-rate');
+  const weight     = getVal('rev-weight');
+  const drugAmount = getVal('rev-drug-amount');
+  const bagVol     = getVal('rev-bag-vol');
+  const drugUnit   = document.getElementById('rev-drug-unit').value;
 
-  const mcgKgMin = (rate * conc) / (weight * 60);
-  const mcgKgHr  = mcgKgMin * 60;
-  const mgKgHr   = mcgKgHr / 1000;
-  const mcgMin   = rate * conc / 60;
+  if (!rate || !drugAmount || !bagVol) { hideResult('rev-result'); return; }
+
+  // Derive concentration
+  let concStr;
+  if (drugUnit === 'units') {
+    const concUnitsMl = drugAmount / bagVol;
+    concStr = fmt(concUnitsMl, 4) + ' units/mL';
+    const unitsHr = rate * concUnitsMl;
+    showResult('rev-result', resultHtml(
+      fmt(unitsHr, 3), 'units/hr',
+      [
+        ['units/min',          fmt(unitsHr / 60, 4)],
+        ['Bag concentration',  concStr],
+        ['Rate',               fmt(rate, 2) + ' mL/hr'],
+      ]
+    ), 'success');
+    return;
+  }
+
+  const mgAmount = drugUnit === 'g' ? drugAmount * 1000 : drugAmount;
+  const concMgMl  = mgAmount / bagVol;
+  const concMcgMl = concMgMl * 1000;
+  concStr = fmt(concMgMl, 4) + ' mg/mL  (' + fmt(concMcgMl, 2) + ' mcg/mL)';
+
+  const mcgKgMin = weight ? (rate * concMcgMl) / (weight * 60) : null;
+  const mcgKgHr  = mcgKgMin !== null ? mcgKgMin * 60 : null;
+  const mgKgHr   = mcgKgHr  !== null ? mcgKgHr / 1000 : null;
+  const mcgMin   = rate * concMcgMl / 60;
+  const mcgHr    = mcgMin * 60;
+  const mgHr     = mcgHr / 1000;
+  const mgMin    = mgHr / 60;
+
+  const rows = [
+    ...(mcgKgMin !== null ? [
+      ['mcg/kg/min', fmt(mcgKgMin, 4)],
+      ['mcg/kg/hr',  fmt(mcgKgHr, 3)],
+      ['mg/kg/hr',   fmt(mgKgHr, 5)],
+    ] : []),
+    ['mcg/min',          fmt(mcgMin, 3)],
+    ['mcg/hr',           fmt(mcgHr, 2)],
+    ['mg/hr',            fmt(mgHr, 4)],
+    ['mg/min',           fmt(mgMin, 5)],
+    ['Bag concentration',concStr],
+  ];
 
   showResult('rev-result', resultHtml(
-    fmt(mcgKgMin, 3), 'mcg/kg/min',
-    [
-      ['mcg/kg/hr',   fmt(mcgKgHr, 2)],
-      ['mg/kg/hr',    fmt(mgKgHr, 4)],
-      ['mcg/min',     fmt(mcgMin, 2)],
-      ['Total mcg/hr',fmt(mcgMin * 60, 1)]
-    ]
+    mcgKgMin !== null ? fmt(mcgKgMin, 4) : fmt(mcgMin, 3),
+    mcgKgMin !== null ? 'mcg/kg/min' : 'mcg/min',
+    rows
   ), 'success');
 }
 
