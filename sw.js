@@ -1,11 +1,15 @@
 'use strict';
 
-const CACHE = 'mhm-infusion-v1';
+const CACHE = 'mhm-infusion-v2';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './icon.svg'
+  './sw.js',
+  './icon.svg',
+  './icon-180.png',
+  './icon-192.png',
+  './icon-512.png'
 ];
 
 self.addEventListener('install', event => {
